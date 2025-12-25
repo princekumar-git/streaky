@@ -1,0 +1,4 @@
+node_modules
+streaky.db
+.env
+prototype*

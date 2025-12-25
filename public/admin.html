@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streaky Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+</head>
+<body class="bg-gray-900 text-white font-sans p-6">
+
+    <div class="max-w-6xl mx-auto">
+        <div class="flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
+            <h1 class="text-2xl font-bold flex items-center gap-3">
+                <i class="fas fa-shield-alt text-red-500"></i> Admin Console
+            </h1>
+            <a href="index.html" class="bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded text-sm transition">
+                <i class="fas fa-arrow-left"></i> Back to App
+            </a>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+                <p class="text-gray-400 uppercase text-xs font-bold">Total Users</p>
+                <p class="text-4xl font-bold mt-2" id="totalUsers">-</p>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+                <p class="text-gray-400 uppercase text-xs font-bold">Total Habits Tracked</p>
+                <p class="text-4xl font-bold mt-2 text-blue-400" id="totalHabits">-</p>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+                <p class="text-gray-400 uppercase text-xs font-bold">Database Health</p>
+                <p class="text-4xl font-bold mt-2 text-green-400">OK</p>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+            <div class="p-4 bg-gray-900/50 border-b border-gray-700">
+                <h3 class="font-bold">User Database</h3>
+            </div>
+            <table class="w-full text-left">
+                <thead class="bg-gray-900 text-gray-400 text-xs uppercase">
+                    <tr>
+                        <th class="p-4">ID</th>
+                        <th class="p-4">Username</th>
+                        <th class="p-4">Role</th>
+                        <th class="p-4">Activity (Habits/Tasks)</th>
+                        <th class="p-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="userTableBody" class="divide-y divide-gray-700">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const currentUser = localStorage.getItem('lifesync_user');
+        
+        async function loadAdminData() {
+            try {
+                const res = await fetch('/api/admin/users', {
+                    headers: { 'x-user': currentUser }
+                });
+                
+                if(res.status === 401 || res.status === 403) {
+                    alert("Unauthorized Access");
+                    window.location.href = 'index.html';
+                    return;
+                }
+
+                const users = await res.json();
+                renderTable(users);
+                updateStats(users);
+            } catch(e) {
+                console.error(e);
+            }
+        }
+
+        function updateStats(users) {
+            document.getElementById('totalUsers').innerText = users.length;
+            const totalH = users.reduce((acc, u) => acc + u.habit_count, 0);
+            document.getElementById('totalHabits').innerText = totalH;
+        }
+
+        function renderTable(users) {
+            const tbody = document.getElementById('userTableBody');
+            tbody.innerHTML = '';
+
+            users.forEach(user => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-700/50 transition";
+                tr.innerHTML = `
+                    <td class="p-4 text-gray-500">#${user.id}</td>
+                    <td class="p-4 font-bold ${user.role === 'admin' ? 'text-red-400' : 'text-white'}">
+                        ${user.username} ${user.role === 'admin' ? '<i class="fas fa-crown text-xs ml-1"></i>' : ''}
+                    </td>
+                    <td class="p-4 text-sm text-gray-400 uppercase">${user.role}</td>
+                    <td class="p-4 text-sm">
+                        <span class="bg-blue-900 text-blue-300 px-2 py-1 rounded text-xs mr-2">${user.habit_count} Habits</span>
+                        <span class="bg-green-900 text-green-300 px-2 py-1 rounded text-xs">${user.task_count} Tasks</span>
+                    </td>
+                    <td class="p-4 text-right space-x-2">
+                        <button onclick="resetPass(${user.id}, '${user.username}')" class="text-gray-400 hover:text-white text-xs underline">Reset PW</button>
+                        ${user.username !== currentUser ? 
+                            `<button onclick="deleteUser(${user.id})" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs">Delete</button>` 
+                            : '<span class="text-xs text-gray-600">Current</span>'}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function deleteUser(id) {
+            if(confirm('Are you sure? This will delete all their data permanently.')) {
+                await fetch(`/api/admin/users/${id}`, { method: 'DELETE', headers: { 'x-user': currentUser } });
+                loadAdminData();
+            }
+        }
+
+        async function resetPass(id, name) {
+            const newPass = prompt(`Enter new password for ${name}:`);
+            if(newPass) {
+                await fetch('/api/admin/reset-pass', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-user': currentUser },
+                    body: JSON.stringify({ targetUserId: id, newPassword: newPass })
+                });
+                alert('Password updated.');
+            }
+        }
+
+        loadAdminData();
+    </script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Streaky</title>
+    <link rel="icon" href="logo.png" type="image/png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+      .hidden-section { display: none !important; }
+      .active-nav { background-color: #1f2937; border-left: 4px solid #60a5fa; }
+      .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+      .custom-scrollbar::-webkit-scrollbar-track { background: #111827; }
+      .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+      .custom-checkbox { width: 1.5rem; height: 1.5rem; border-radius: 0.25rem; background-color: #1f2937; border: 1px solid #374151; cursor: pointer; accent-color: #2563eb; }
+      .sticky-col { position: sticky; left: 0; z-index: 20; }
+      
+      /* Simple Theme Inversion for Demo (Optional) */
+      .theme-light { filter: invert(1) hue-rotate(180deg); }
+      .theme-light img { filter: invert(1) hue-rotate(180deg); } /* Keep images normal */
+    </style>
+  </head>
+  <body class="bg-gray-900 text-white font-sans antialiased h-screen flex overflow-hidden">
+    
+    <aside class="w-64 bg-gray-900 border-r border-gray-800 flex flex-col hidden md:flex z-50">
+      <div class="p-6 flex items-center gap-2 border-b border-gray-800">
+        <img src="logo.png" alt="Logo" class="w-8 h-8 object-contain" />
+        <span class="text-xl font-bold tracking-tight">Streaky</span>
+      </div>
+      <nav class="flex-1 p-4 space-y-2">
+        <button id="nav-dashboard" onclick="switchTab('dashboard')" class="w-full flex items-center gap-3 p-3 rounded-lg text-gray-300 hover:bg-gray-800 hover:text-white transition active-nav">
+          <i class="fas fa-chart-pie w-5"></i> Dashboard
+        </button>
+        <button id="nav-habits" onclick="switchTab('habits')" class="w-full flex items-center gap-3 p-3 rounded-lg text-gray-300 hover:bg-gray-800 hover:text-white transition">
+          <i class="fas fa-list-check w-5"></i> Habits & Grid
+        </button>
+      </nav>
+      <div class="p-4 border-t border-gray-800">
+        <div class="bg-gray-800 rounded-lg p-4">
+          <p class="text-xs text-gray-400 uppercase font-bold mb-2">Today</p>
+          <p id="todayDate" class="text-lg font-bold text-white"></p>
+        </div>
+      </div>
+    </aside>
+
+    <div class="flex-1 flex flex-col relative min-w-0">
+      <nav class="h-16 border-b border-gray-800 flex items-center justify-between px-6 bg-gray-900 z-40">
+        <h2 class="text-lg font-bold">Personal Tracker</h2>
+        
+        <div class="relative" id="profileSection">
+            <button onclick="toggleProfileDropdown(event)" class="flex items-center gap-3 hover:bg-gray-800 p-2 pl-3 rounded-lg transition border border-transparent hover:border-gray-700">
+                <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/30">
+                    <span id="navUserInitial">U</span>
+                </div>
+                <i class="fas fa-chevron-down text-xs text-gray-400"></i>
+            </button>
+
+            <div id="profileDropdown" class="hidden absolute right-0 mt-2 w-64 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden transform origin-top-right transition-all">
+                <div class="p-4 border-b border-gray-700 bg-gray-900/50">
+                    <p class="text-xs text-gray-400 uppercase font-bold mb-1">Signed in as</p>
+                    <p class="font-bold text-white truncate text-lg" id="navUsername">User</p>
+                    <p class="text-xs text-gray-500" id="navRoleDisplay">Member</p>
+                </div>
+                
+                <div class="py-2">
+                    <div id="adminLinkContainer"></div>
+
+                    <button onclick="toggleTheme()" class="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-3 transition">
+                        <i class="fas fa-adjust w-5 text-center"></i> Toggle Theme
+                    </button>
+                    
+                    <button onclick="deleteMyAccount()" class="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-900/20 hover:text-red-300 flex items-center gap-3 transition">
+                        <i class="fas fa-trash-alt w-5 text-center"></i> Delete Account
+                    </button>
+                </div>
+
+                <div class="border-t border-gray-700 p-2 bg-gray-900">
+                    <button onclick="logout()" class="w-full text-center py-2 text-sm text-gray-400 hover:text-white transition font-medium hover:bg-gray-800 rounded-lg">
+                        Sign Out
+                    </button>
+                </div>
+            </div>
+        </div>
+      </nav>
+
+      <main class="flex-1 overflow-auto custom-scrollbar p-6 relative">
+        <div id="panel-dashboard" class="space-y-6 max-w-5xl mx-auto animate-fade-in">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg">
+              <p class="text-gray-400 text-sm font-medium">Total Habits</p>
+              <h3 class="text-4xl font-bold mt-2 text-white" id="stat-total-habits">0</h3>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg">
+              <p class="text-gray-400 text-sm font-medium">Weekly Success Rate</p>
+              <h3 class="text-4xl font-bold mt-2 text-blue-400" id="stat-weekly-score">0%</h3>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg">
+              <p class="text-gray-400 text-sm font-medium">Tasks Pending</p>
+              <h3 class="text-4xl font-bold mt-2 text-green-400" id="stat-tasks-done">0/0</h3>
+            </div>
+          </div>
+
+          <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg h-80">
+            <h3 class="text-lg font-bold mb-4">Last 7 Days Performance</h3>
+            <div class="h-64"><canvas id="weeklyChart"></canvas></div>
+          </div>
+
+          <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg">
+            <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+              <i class="fas fa-tasks text-gray-400"></i> Quick Tasks
+            </h3>
+            <div class="flex gap-2 mb-4">
+              <input type="text" id="taskInput" placeholder="Add a new task..." class="flex-1 bg-gray-900 border border-gray-700 rounded p-2 text-white focus:border-blue-500 outline-none"/>
+              <button onclick="addTask()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white"><i class="fas fa-plus"></i></button>
+            </div>
+            <div id="taskList" class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2"></div>
+          </div>
+          
+           <div id="numeric-analytics" class="hidden bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-lg font-bold">Numeric Progress (30 Days)</h3>
+                <select id="numericSelector" onchange="renderNumericChart()" class="bg-gray-900 border border-gray-700 rounded p-2 text-sm text-gray-300 outline-none focus:border-blue-500"></select>
+            </div>
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <div class="bg-gray-900/50 p-4 rounded-lg">
+                    <p class="text-xs text-gray-500 uppercase">Total Volume</p>
+                    <p id="num-stat-total" class="text-xl font-bold text-green-400">-</p>
+                </div>
+                <div class="bg-gray-900/50 p-4 rounded-lg">
+                    <p class="text-xs text-gray-500 uppercase">Daily Avg</p>
+                    <p id="num-stat-avg" class="text-xl font-bold text-blue-400">-</p>
+                </div>
+                <div class="bg-gray-900/50 p-4 rounded-lg">
+                    <p class="text-xs text-gray-500 uppercase">Best Day</p>
+                    <p id="num-stat-best" class="text-xl font-bold text-yellow-400">-</p>
+                </div>
+            </div>
+            <div class="h-64 relative w-full">
+                <canvas id="numericChartCanvas"></canvas>
+            </div>
+           </div>
+        </div>
+
+        <div id="panel-habits" class="hidden-section space-y-6">
+          <div class="flex justify-between items-center bg-gray-800 p-4 rounded-xl border border-gray-700">
+            <div class="flex items-center gap-4">
+              <button onclick="changeMonth(-1)" class="p-2 hover:bg-gray-700 rounded"><i class="fas fa-chevron-left"></i></button>
+              <div>
+                <h2 class="text-2xl font-bold" id="displayMonth">Month</h2>
+                <p class="text-sm text-gray-400" id="displayYear">Year</p>
+              </div>
+              <button onclick="changeMonth(1)" class="p-2 hover:bg-gray-700 rounded"><i class="fas fa-chevron-right"></i></button>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="exportToExcel()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-medium flex items-center gap-2">
+                <i class="fas fa-file-excel"></i> Export
+              </button>
+              <button onclick="openHabitModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium flex items-center gap-2">
+                <i class="fas fa-plus"></i> New Habit
+              </button>
+            </div>
+          </div>
+          <div class="overflow-x-auto custom-scrollbar bg-gray-900 rounded-xl border border-gray-700 shadow-2xl">
+            <table class="w-full text-left border-collapse">
+              <thead><tr id="gridHeaderRow" class="border-b border-gray-700 bg-gray-900"></tr></thead>
+              <tbody id="habitGridBody" class="divide-y divide-gray-800"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <div id="habitModal" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-50 backdrop-blur-sm">
+      <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 w-96 shadow-2xl">
+        <h3 class="text-xl font-bold mb-4">Create New Habit</h3>
+        <form onsubmit="saveHabit(event)">
+          <div class="mb-4">
+            <label class="block text-gray-400 text-xs uppercase font-bold mb-1">Habit Name</label>
+            <input type="text" id="habitName" required class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white outline-none focus:border-blue-500"/>
+          </div>
+          <div class="flex gap-4 mb-4">
+            <div class="flex-1">
+              <label class="block text-gray-400 text-xs uppercase font-bold mb-1">Type</label>
+              <select id="habitType" onchange="toggleHabitFields()" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white outline-none">
+                <option value="boolean">Checkmark (Yes/No)</option>
+                <option value="numeric">Numeric (Pages, Mins)</option>
+              </select>
+            </div>
+            <div id="unitField" class="hidden flex-1">
+              <label class="block text-gray-400 text-xs uppercase font-bold mb-1">Unit</label>
+              <input type="text" id="habitUnit" placeholder="mins" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white outline-none"/>
+            </div>
+          </div>
+          <div id="targetField" class="hidden mb-6">
+            <label class="block text-gray-400 text-xs uppercase font-bold mb-1">Daily Target</label>
+            <input type="number" id="habitTarget" placeholder="e.g. 30" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white outline-none"/>
+          </div>
+          <div class="flex justify-end gap-3">
+            <button type="button" onclick="closeHabitModal()" class="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded font-bold text-white">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <script src="script.js"></script>
+  </body>
+</html>
