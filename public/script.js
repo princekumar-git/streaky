@@ -103,11 +103,6 @@ document.addEventListener('click', (e) => {
     }
 });
 
-function toggleTheme() {
-    // Simple filter inversion demo
-    document.body.classList.toggle('theme-light');
-}
-
 async function deleteMyAccount() {
     const confirmName = prompt(`DANGER: This will permanently delete your account and all data.\n\nType your username "${currentUser}" to confirm:`);
     
@@ -429,7 +424,6 @@ async function deleteTask(id) {
     tasks = tasks.filter(x => x.id !== id); renderTasks(); await apiCall(`/tasks/${id}`, 'DELETE'); 
 }
 
-document.getElementById('taskInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') addTask(); });
 
 // ==========================================
 // 7. DASHBOARD & CHARTS
