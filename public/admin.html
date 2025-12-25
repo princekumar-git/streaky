@@ -5,133 +5,120 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Streaky Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" href="fire.png" type="image/png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1f2937; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+        .glass-panel { background: rgba(31, 41, 55, 0.95); backdrop-filter: blur(10px); }
+    </style>
 </head>
-<body class="bg-gray-900 text-white font-sans p-6">
-
-    <div class="max-w-6xl mx-auto">
+<body class="bg-gray-900 text-white font-sans p-6 min-h-screen">
+    <div class="max-w-[95%] mx-auto">
         <div class="flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
-            <h1 class="text-2xl font-bold flex items-center gap-3">
-                <i class="fas fa-shield-alt text-red-500"></i> Admin Console
-            </h1>
-            <a href="index.html" class="bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded text-sm transition">
-                <i class="fas fa-arrow-left"></i> Back to App
-            </a>
+            <h1 class="text-2xl font-bold flex items-center gap-3"><i class="fa-solid fa-user-gear text-5xl"></i> Admin Console</h1>
+            <a href="index.html" class="bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded text-sm transition flex items-center gap-2 border border-gray-700"><i class="fas fa-arrow-left"></i> Back to App</a>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
-                <p class="text-gray-400 uppercase text-xs font-bold">Total Users</p>
-                <p class="text-4xl font-bold mt-2" id="totalUsers">-</p>
-            </div>
-            <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
-                <p class="text-gray-400 uppercase text-xs font-bold">Total Habits Tracked</p>
-                <p class="text-4xl font-bold mt-2 text-blue-400" id="totalHabits">-</p>
-            </div>
-            <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
-                <p class="text-gray-400 uppercase text-xs font-bold">Database Health</p>
-                <p class="text-4xl font-bold mt-2 text-green-400">OK</p>
-            </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-gray-800 p-6 rounded-lg border border-gray-700 shadow-lg"><p class="text-gray-400 uppercase text-xs font-bold tracking-wider">Total Users</p><p class="text-4xl font-bold mt-2" id="totalUsers">-</p></div>
+            <div class="bg-gray-800 p-6 rounded-lg border border-gray-700 shadow-lg"><p class="text-gray-400 uppercase text-xs font-bold tracking-wider">Total Habits</p><p class="text-4xl font-bold mt-2 text-blue-400" id="totalHabits">-</p></div>
+            <div class="bg-gray-800 p-6 rounded-lg border border-gray-700 shadow-lg"><p class="text-gray-400 uppercase text-xs font-bold tracking-wider">Total Tasks</p><p class="text-4xl font-bold mt-2 text-green-400" id="totalTasks">-</p></div>
+            <div class="bg-gray-800 p-6 rounded-lg border border-gray-700 shadow-lg"><p class="text-gray-400 uppercase text-xs font-bold tracking-wider">System Status</p><p class="text-xl font-bold mt-3 text-green-500 flex items-center gap-2"><span class="relative flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span></span> Operational</p></div>
         </div>
 
-        <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-            <div class="p-4 bg-gray-900/50 border-b border-gray-700">
-                <h3 class="font-bold">User Database</h3>
+        <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-xl">
+            <div class="p-4 bg-gray-900/50 border-b border-gray-700 flex justify-between items-center"><h3 class="font-bold text-lg text-gray-200">User Database</h3><button onclick="loadAdminData()" class="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition"><i class="fas fa-sync-alt"></i> Refresh Data</button></div>
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left whitespace-nowrap">
+                    <thead class="bg-gray-900 text-gray-400 text-xs uppercase font-semibold tracking-wider">
+                        <tr><th class="p-4">ID</th><th class="p-4">User</th><th class="p-4">Full Name</th><th class="p-4">Location</th><th class="p-4">Role</th><th class="p-4">Stats</th><th class="p-4 text-right">Actions</th></tr>
+                    </thead>
+                    <tbody id="userTableBody" class="divide-y divide-gray-700 text-sm"></tbody>
+                </table>
             </div>
-            <table class="w-full text-left">
-                <thead class="bg-gray-900 text-gray-400 text-xs uppercase">
-                    <tr>
-                        <th class="p-4">ID</th>
-                        <th class="p-4">Username</th>
-                        <th class="p-4">Role</th>
-                        <th class="p-4">Activity (Habits/Tasks)</th>
-                        <th class="p-4 text-right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="userTableBody" class="divide-y divide-gray-700">
-                    </tbody>
-            </table>
+        </div>
+    </div>
+
+    <div id="userDetailsModal" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div class="glass-panel rounded-xl border border-gray-600 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div class="p-6 border-b border-gray-700 flex justify-between items-center bg-gray-800/50">
+                <div><h3 class="text-xl font-bold text-white">User Profile</h3><p class="text-xs text-gray-400 mt-1">Viewing detailed database record</p></div>
+                <button onclick="closeUserModal()" class="text-gray-400 hover:text-white transition bg-gray-700 hover:bg-gray-600 rounded-full w-8 h-8 flex items-center justify-center"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-6 space-y-6">
+                <div class="bg-gray-800/50 p-4 rounded-lg border border-gray-700">
+                    <h4 class="text-xs font-bold text-blue-400 uppercase mb-3 tracking-wider border-b border-gray-700 pb-2">Account Information</h4>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div><label class="block text-xs text-gray-500 mb-1">User ID</label><p id="detail-id" class="text-gray-300 font-mono text-sm bg-gray-900/50 px-2 py-1 rounded inline-block">#</p></div>
+                        <div class="col-span-1 md:col-span-2"><label class="block text-xs text-gray-500 mb-1">Username</label><p id="detail-username" class="text-white font-bold text-lg tracking-wide">-</p></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">Role</label><div id="detail-role">-</div></div>
+                    </div>
+                </div>
+                <div class="bg-gray-800/50 p-4 rounded-lg border border-gray-700">
+                    <h4 class="text-xs font-bold text-purple-400 uppercase mb-3 tracking-wider border-b border-gray-700 pb-2">Personal Details</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                        <div class="col-span-1 md:col-span-2"><label class="block text-xs text-gray-500 mb-1">Full Name</label><p id="detail-fullname" class="text-white font-medium text-lg border-b border-gray-700/50 pb-1">-</p></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">Age</label><p id="detail-age" class="text-white">-</p></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">Gender</label><p id="detail-gender" class="text-white">-</p></div>
+                        <div class="col-span-1 md:col-span-2"><label class="block text-xs text-gray-500 mb-1">Location</label><div class="flex items-center gap-2 text-white"><i class="fas fa-map-marker-alt text-gray-500"></i><span id="detail-location">-</span></div></div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-blue-900/20 p-4 rounded-lg border border-blue-500/30 text-center"><p class="text-xs text-gray-400 mb-1">Active Habits</p><p id="detail-habits" class="text-3xl font-bold text-blue-400">0</p></div>
+                    <div class="bg-green-900/20 p-4 rounded-lg border border-green-500/30 text-center"><p class="text-xs text-gray-400 mb-1">Tasks Created</p><p id="detail-tasks" class="text-3xl font-bold text-green-400">0</p></div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-700 bg-gray-800/50 flex justify-end"><button onclick="closeUserModal()" class="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded font-medium transition text-sm">Close Details</button></div>
         </div>
     </div>
 
     <script>
-        const currentUser = localStorage.getItem('lifesync_user');
-        
-        async function loadAdminData() {
+        const authToken = localStorage.getItem('lifesync_token');
+        if(!authToken) window.location.href = 'landing.html';
+        let allUsersData = [];
+        async function apiCall(endpoint, method = 'GET') {
             try {
-                const res = await fetch('/api/admin/users', {
-                    headers: { 'x-user': currentUser }
+                const res = await fetch(`/api${endpoint}`, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` } });
+                if(res.status === 401 || res.status === 403) window.location.href = 'landing.html';
+                return res.json();
+            } catch(e) { console.error(e); }
+        }
+        async function loadAdminData() {
+            const stats = await apiCall('/admin/stats');
+            if(stats) { document.getElementById('totalUsers').innerText = stats.users; document.getElementById('totalHabits').innerText = stats.habits; document.getElementById('totalTasks').innerText = stats.tasks; }
+            const users = await apiCall('/admin/users');
+            allUsersData = users || [];
+            const tbody = document.getElementById('userTableBody'); tbody.innerHTML = '';
+            if(users) {
+                users.forEach(user => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-gray-700/50 transition cursor-pointer border-b border-gray-800 last:border-0';
+                    tr.onclick = () => showUserDetails(user.id);
+                    tr.innerHTML = `<td class="p-4 text-gray-500 font-mono">#${user.id}</td><td class="p-4 font-bold text-white">${user.username}</td><td class="p-4 text-gray-300">${user.full_name || '<span class="text-gray-600 italic">Not set</span>'}</td><td class="p-4 text-gray-400 text-sm truncate max-w-[150px]">${user.location || '-'}</td><td class="p-4"><span class="${user.role==='admin'?'bg-red-900/50 text-red-200 border border-red-800':'bg-blue-900/50 text-blue-200 border border-blue-800'} px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide">${user.role}</span></td><td class="p-4 text-sm font-mono"><span class="text-blue-400 font-bold">${user.habit_count}</span> <span class="text-gray-600 text-xs">H</span> <span class="text-gray-600 mx-1">|</span> <span class="text-green-400 font-bold">${user.task_count}</span> <span class="text-gray-600 text-xs">T</span></td><td class="p-4 text-right"><button onclick="event.stopPropagation(); deleteUser(${user.id})" class="text-red-500 hover:text-red-400 hover:bg-red-900/30 w-8 h-8 rounded flex items-center justify-center transition ml-auto"><i class="fas fa-trash"></i></button></td>`;
+                    tbody.appendChild(tr);
                 });
-                
-                if(res.status === 401 || res.status === 403) {
-                    alert("Unauthorized Access");
-                    window.location.href = 'index.html';
-                    return;
-                }
-
-                const users = await res.json();
-                renderTable(users);
-                updateStats(users);
-            } catch(e) {
-                console.error(e);
             }
         }
-
-        function updateStats(users) {
-            document.getElementById('totalUsers').innerText = users.length;
-            const totalH = users.reduce((acc, u) => acc + u.habit_count, 0);
-            document.getElementById('totalHabits').innerText = totalH;
+        async function deleteUser(id) { if(confirm('Are you sure you want to delete this user?')) { await apiCall(`/admin/users/${id}`, 'DELETE'); loadAdminData(); } }
+        function showUserDetails(id) {
+            const user = allUsersData.find(u => u.id === id); if (!user) return;
+            document.getElementById('detail-id').innerText = user.id;
+            document.getElementById('detail-username').innerText = user.username;
+            document.getElementById('detail-role').innerHTML = `<span class="${user.role==='admin'?'bg-red-900 text-red-300 border-red-800':'bg-blue-900 text-blue-300 border-blue-800'} border px-2 py-1 rounded text-xs uppercase font-bold tracking-wider">${user.role}</span>`;
+            document.getElementById('detail-fullname').innerText = user.full_name ? user.full_name : 'Not provided';
+            document.getElementById('detail-age').innerText = user.age ? user.age : '-';
+            document.getElementById('detail-gender').innerText = user.gender ? user.gender : '-';
+            document.getElementById('detail-location').innerText = user.location ? user.location : 'Location not set';
+            document.getElementById('detail-habits').innerText = user.habit_count || 0;
+            document.getElementById('detail-tasks').innerText = user.task_count || 0;
+            document.getElementById('userDetailsModal').classList.remove('hidden');
+            document.getElementById('userDetailsModal').classList.add('flex');
         }
-
-        function renderTable(users) {
-            const tbody = document.getElementById('userTableBody');
-            tbody.innerHTML = '';
-
-            users.forEach(user => {
-                const tr = document.createElement('tr');
-                tr.className = "hover:bg-gray-700/50 transition";
-                tr.innerHTML = `
-                    <td class="p-4 text-gray-500">#${user.id}</td>
-                    <td class="p-4 font-bold ${user.role === 'admin' ? 'text-red-400' : 'text-white'}">
-                        ${user.username} ${user.role === 'admin' ? '<i class="fas fa-crown text-xs ml-1"></i>' : ''}
-                    </td>
-                    <td class="p-4 text-sm text-gray-400 uppercase">${user.role}</td>
-                    <td class="p-4 text-sm">
-                        <span class="bg-blue-900 text-blue-300 px-2 py-1 rounded text-xs mr-2">${user.habit_count} Habits</span>
-                        <span class="bg-green-900 text-green-300 px-2 py-1 rounded text-xs">${user.task_count} Tasks</span>
-                    </td>
-                    <td class="p-4 text-right space-x-2">
-                        <button onclick="resetPass(${user.id}, '${user.username}')" class="text-gray-400 hover:text-yellow-400 p-1 rounded transition" title="Reset Password"><i class="fas fa-key"></i></button>
-                        ${user.username !== currentUser ? 
-                            `<button onclick="deleteUser(${user.id}, '${user.username}')" class="text-red-400 hover:text-red-300 hover:bg-red-900/30 p-1.5 rounded transition" title="Delete User">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>` 
-                            : '<span class="text-xs text-gray-600">Current</span>'}
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        async function deleteUser(id, username) {
-            if(confirm(`Are you sure you want to permanently delete user "${username}"? This action cannot be undone and will delete all their data.`)) {
-                await fetch(`/api/admin/users/${id}`, { method: 'DELETE', headers: { 'x-user': currentUser } });
-                loadAdminData();
-            }
-        }
-
-        async function resetPass(id, name) {
-            const newPass = prompt(`Enter new password for ${name}:`);
-            if(newPass) {
-                await fetch('/api/admin/reset-pass', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-user': currentUser },
-                    body: JSON.stringify({ targetUserId: id, newPassword: newPass })
-                });
-                alert('Password updated.');
-            }
-        }
-
+        function closeUserModal() { document.getElementById('userDetailsModal').classList.add('hidden'); document.getElementById('userDetailsModal').classList.remove('flex'); }
+        document.getElementById('userDetailsModal').addEventListener('click', function(e) { if (e.target === this) closeUserModal(); });
+        document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeUserModal(); });
         loadAdminData();
     </script>
 </body>

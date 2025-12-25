@@ -1,12 +1,10 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
-// Connect to database (creates file if not exists)
 const dbPath = path.resolve(__dirname, 'streaky.db');
 const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-        console.error('Error opening database:', err.message);
-    } else {
+    if (err) console.error('Error opening database:', err.message);
+    else {
         console.log('Connected to the SQLite database.');
         initDb();
     }
@@ -14,12 +12,16 @@ const db = new sqlite3.Database(dbPath, (err) => {
 
 function initDb() {
     db.serialize(() => {
-        // 1. Users Table
+        // 1. Users Table (With extra profile fields)
         db.run(`CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
             password TEXT,
-            role TEXT DEFAULT 'user'
+            role TEXT DEFAULT 'user',
+            full_name TEXT,
+            location TEXT,
+            gender TEXT,
+            age INTEGER
         )`);
 
         // 2. Habits Table
@@ -33,7 +35,7 @@ function initDb() {
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )`);
 
-        // 3. Habit History (Tracking)
+        // 3. Habit History
         db.run(`CREATE TABLE IF NOT EXISTS habit_history (
             habit_id INTEGER,
             date TEXT,

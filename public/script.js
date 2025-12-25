@@ -4,555 +4,538 @@
 
 const currentUser = localStorage.getItem('lifesync_user');
 const currentRole = localStorage.getItem('lifesync_role'); 
+const authToken = localStorage.getItem('lifesync_token'); 
 
-if(localStorage.getItem('lifesync_auth') !== 'true' || !currentUser) {
-    window.location.href = 'landing.html';
-}
+if(!authToken || !currentUser) window.location.href = 'landing.html';
 
-// Global State
 let habits = [];
 let tasks = [];
+let weeklyChartInstance = null;
 let numericChartInstance = null;
+// Initialize viewDate to the 1st of the current month to avoid overflow issues immediately
 let viewDate = new Date(); 
-let myChart = null; 
+viewDate.setDate(1); 
 
-// --- API HELPER ---
 async function apiCall(endpoint, method = 'GET', body = null) {
     const options = {
         method,
-        headers: { 'Content-Type': 'application/json', 'x-user': currentUser }
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }
     };
     if (body) options.body = JSON.stringify(body);
-    const res = await fetch(`/api${endpoint}`, options);
-    if(res.status === 401) logout();
-    return res.json();
+    try {
+        const res = await fetch(`/api${endpoint}`, options);
+        if(res.status === 401 || res.status === 403) logout();
+        return res.json();
+    } catch (e) { console.error("API Error", e); }
 }
 
-// --- INIT ---
-document.getElementById('todayDate').innerText = new Date().toLocaleDateString('en-US', { 
-    weekday: 'short', month: 'long', day: 'numeric'
-});
+document.getElementById('todayDate').innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' });
 
 async function initApp() {
-    // 1. Load Data
     const data = await apiCall('/data');
-    habits = data.habits;
-    tasks = data.tasks;
+    habits = data.habits || [];
+    tasks = data.tasks || [];
 
-    // 2. Render App
     renderTasks();
-    renderMonthGrid(); 
+    renderMonthGrid();
     initDashboardChart();
     updateDashboardStats();
     initNumericAnalytics();
 
-    // 3. Setup Profile Menu
     document.getElementById('navUsername').innerText = currentUser;
     document.getElementById('navUserInitial').innerText = currentUser.charAt(0).toUpperCase();
-    document.getElementById('navRoleDisplay').innerText = currentRole === 'admin' ? 'System Administrator' : 'Standard Member';
-
-    // 4. Inject Admin Link if Admin
+    document.getElementById('navRoleDisplay').innerText = currentRole === 'admin' ? 'Administrator' : 'Member';
+    
     if(currentRole === 'admin') {
-        const container = document.getElementById('adminLinkContainer');
-        container.innerHTML = `
-            <a href="admin.html" class="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-gray-700 hover:text-red-300 flex items-center gap-3 transition">
-                 <i class="fas fa-shield-alt w-5 text-center"></i> Admin Panel
-            </a>
-        `;
+        document.getElementById('adminLinkContainer').innerHTML = 
+            `<a href="admin.html" class="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-gray-700 flex items-center gap-3 transition border-b border-gray-700 font-bold"><i class="fas fa-shield-alt w-5 text-center"></i> Admin Console</a>`;
     }
 }
 
-initApp();
-
 // ==========================================
-// 2. NAVIGATION & SYSTEM
+// 2. UI & SIDEBAR
 // ==========================================
 
 function switchTab(tab) {
-    document.querySelectorAll('.hidden-section').forEach(el => el.classList.add('hidden-section'));
-    document.getElementById('panel-dashboard').classList.add('hidden-section');
-    document.getElementById('panel-habits').classList.add('hidden-section');
+    document.querySelectorAll('.active-nav').forEach(el => el.classList.remove('active-nav'));
+    document.getElementById(`nav-${tab}`).classList.add('active-nav');
     
-    document.getElementById('nav-dashboard').classList.remove('active-nav');
-    document.getElementById('nav-habits').classList.remove('active-nav');
-
-    document.getElementById('panel-' + tab).classList.remove('hidden-section');
-    document.getElementById('nav-' + tab).classList.add('active-nav');
-
     if(tab === 'dashboard') {
-        updateDashboardStats();
-        initNumericAnalytics(); 
+        document.getElementById('panel-dashboard').classList.remove('hidden-section');
+        document.getElementById('panel-habits').classList.add('hidden-section');
     } else {
-        renderMonthGrid();
+        document.getElementById('panel-dashboard').classList.add('hidden-section');
+        document.getElementById('panel-habits').classList.remove('hidden-section');
     }
 }
 
-// --- PROFILE MENU LOGIC ---
-function toggleProfileDropdown(e) {
-    if(e) e.stopPropagation(); // Prevent immediate close
-    const menu = document.getElementById('profileDropdown');
-    menu.classList.toggle('hidden');
-}
-
-// Close dropdown when clicking outside
-document.addEventListener('click', (e) => {
-    const menu = document.getElementById('profileDropdown');
-    const btn = document.getElementById('profileSection');
-    if (!btn.contains(e.target)) {
-        menu.classList.add('hidden');
-    }
-});
-
-async function deleteMyAccount() {
-    const confirmName = prompt(`DANGER: This will permanently delete your account and all data.\n\nType your username "${currentUser}" to confirm:`);
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const isCollapsed = sidebar.classList.contains('w-20');
     
-    if(confirmName === currentUser) {
-        try {
-            const res = await fetch('/api/user/me', {
-                method: 'DELETE',
-                headers: { 'x-user': currentUser }
-            });
-            if(res.ok) {
-                alert('Account deleted. Goodbye.');
-                logout();
-            } else {
-                alert('Error deleting account.');
-            }
-        } catch(e) {
-            alert('Connection failed.');
-        }
-    } else if(confirmName !== null) {
-        alert('Username did not match. Deletion cancelled.');
+    const texts = document.querySelectorAll('.sidebar-text');
+    const navBtns = document.querySelectorAll('.nav-btn');
+    const brandButton = document.getElementById('brandButton');
+    const profileTrigger = document.getElementById('profileTrigger');
+
+    if (isCollapsed) {
+        // Expand
+        sidebar.classList.replace('w-20', 'w-64');
+        texts.forEach(t => t.classList.remove('hidden'));
+        navBtns.forEach(btn => btn.classList.replace('justify-center', 'px-4'));
+        brandButton.classList.remove('justify-center');
+        profileTrigger.classList.replace('justify-center', 'px-2');
+    } else {
+        // Collapse
+        sidebar.classList.replace('w-64', 'w-20');
+        texts.forEach(t => t.classList.add('hidden'));
+        navBtns.forEach(btn => btn.classList.replace('px-4', 'justify-center'));
+        brandButton.classList.add('justify-center');
+        profileTrigger.classList.replace('px-2', 'justify-center');
     }
 }
+
+function toggleProfileDropdown(e) {
+    e.stopPropagation();
+    document.getElementById('profileDropdown').classList.toggle('hidden');
+}
+document.addEventListener('click', () => document.getElementById('profileDropdown').classList.add('hidden'));
 
 function logout() {
-    localStorage.removeItem('lifesync_auth');
-    localStorage.removeItem('lifesync_user');
-    localStorage.removeItem('lifesync_role');
+    localStorage.clear();
     window.location.href = 'landing.html';
 }
 
-// ==========================================
-// 3. EXCEL EXPORT
-// ==========================================
-function exportToExcel() {
-    const year = viewDate.getFullYear();
-    const month = viewDate.getMonth();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const monthName = viewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-    let header = ['Habit', 'Type', 'Target', 'Unit'];
-    const dateKeys = []; 
-
-    for (let i = 1; i <= daysInMonth; i++) {
-        const d = new Date(year, month, i);
-        header.push(d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })); 
-        dateKeys.push(formatDateKey(d));
+function deleteMyAccount() {
+    if(confirm("Are you sure? This will delete all your data forever.")) {
+        apiCall('/me', 'DELETE').then(() => logout());
     }
-
-    const dataRows = habits.map(h => {
-        let row = [
-            h.text, 
-            h.type, 
-            h.type === 'numeric' ? h.target : '-', 
-            h.type === 'numeric' ? h.unit : '-'
-        ];
-        dateKeys.forEach(key => {
-            const val = h.history[key];
-            if (val === undefined) {
-                row.push('');
-            } else if (h.type === 'boolean') {
-                row.push(val ? '✔' : '');
-            } else {
-                row.push(val);
-            }
-        });
-        return row;
-    });
-
-    const wsData = [header, ...dataRows];
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    XLSX.utils.book_append_sheet(wb, ws, monthName);
-    XLSX.writeFile(wb, `Streaky_Export_${monthName.replace(' ', '_')}.xlsx`);
 }
 
 // ==========================================
-// 4. MONTHLY GRID LOGIC
+// 3. HABITS GRID & ANALYTICS
 // ==========================================
 
+function formatDateKey(date) {
+    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+
+// FIXED: Prevents date overflow (e.g. Jan 31 -> Feb 28)
 function changeMonth(offset) {
-    viewDate.setDate(1); 
-    viewDate.setMonth(viewDate.getMonth() + offset);
+    // Always start from the 1st of the current view month before shifting
+    const current = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+    current.setMonth(current.getMonth() + offset);
+    viewDate = current;
     renderMonthGrid();
 }
 
-function renderMonthGrid() {
+// FIXED: Robust "Best Day" calculation
+function updateMonthlyStats() {
+    if (!habits.length) {
+        document.getElementById('month-rate').innerText = '0%';
+        document.getElementById('month-checkins').innerText = '0';
+        document.getElementById('month-best-day').innerText = '-';
+        return;
+    }
+
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const todayKey = formatDateKey(new Date());
 
+    let totalOpportunities = 0;
+    let totalCompleted = 0;
+    
+    // Index 0 unused. Index 1 = Day 1, etc.
+    let dailyCounts = new Array(daysInMonth + 1).fill(0); 
+
+    habits.forEach(habit => {
+        for (let i = 1; i <= daysInMonth; i++) {
+            totalOpportunities++;
+            const dateKey = formatDateKey(new Date(year, month, i));
+            const val = habit.history[dateKey];
+            
+            let isDone = false;
+            if (habit.type === 'boolean' && val) isDone = true;
+            if (habit.type === 'numeric' && val >= habit.target) isDone = true;
+
+            if (isDone) {
+                totalCompleted++;
+                dailyCounts[i]++;
+            }
+        }
+    });
+
+    // 1. Completion Rate
+    const rate = totalOpportunities > 0 ? Math.round((totalCompleted / totalOpportunities) * 100) : 0;
+    
+    // 2. Best Day Calculation
+    let maxVal = 0;
+    let bestDayIndex = -1;
+
+    for(let i = 1; i <= daysInMonth; i++) {
+        if(dailyCounts[i] > maxVal) {
+            maxVal = dailyCounts[i];
+            bestDayIndex = i;
+        }
+    }
+    
+    let bestDayStr = '-';
+    if(bestDayIndex !== -1 && maxVal > 0) {
+        const d = new Date(year, month, bestDayIndex);
+        // Output: "Mon 15 (8)"
+        bestDayStr = `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${bestDayIndex} (${maxVal})`;
+    }
+
+    // Update DOM
+    document.getElementById('month-rate').innerText = rate + '%';
+    document.getElementById('month-checkins').innerText = totalCompleted;
+    document.getElementById('month-best-day').innerText = bestDayStr;
+}
+
+function renderMonthGrid() {
     document.getElementById('displayMonth').innerText = viewDate.toLocaleDateString('en-US', { month: 'long' });
-    document.getElementById('displayYear').innerText = year;
-
-    const headerRow = document.getElementById('gridHeaderRow');
-    const tbody = document.getElementById('habitGridBody');
-
-    let headerHTML = `<th class="p-4 w-48 sticky-col text-gray-400 font-bold uppercase text-xs tracking-wider shadow-xl z-20 bg-gray-900">Habit</th>`;
+    document.getElementById('displayYear').innerText = viewDate.getFullYear();
+    
+    const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
+    let headerHTML = `<th class="p-4 w-48 sticky-col bg-gray-900 z-20 text-gray-400 text-xs text-left">HABIT</th>`;
     
     for(let i = 1; i <= daysInMonth; i++) {
-        const dateObj = new Date(year, month, i);
-        const dateKey = formatDateKey(dateObj);
-        const isToday = dateKey === todayKey;
-        const weekday = dateObj.toLocaleDateString('en-US', { weekday: 'narrow' });
-
-        headerHTML += `
-            <th class="p-2 text-center min-w-[50px] border-l border-gray-800/50 relative group">
-                <div class="flex flex-col items-center">
-                    <span class="text-[10px] text-gray-500 mb-1">${weekday}</span>
-                    <span class="${isToday ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50' : 'text-gray-300'} w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold">
-                        ${i}
-                    </span>
-                </div>
-            </th>
-        `;
+        const d = new Date(viewDate.getFullYear(), viewDate.getMonth(), i);
+        const isToday = d.toDateString() === new Date().toDateString();
+        headerHTML += `<th class="p-2 text-center min-w-[50px]"><div class="text-xs ${isToday?'text-blue-500 font-bold':'text-gray-500'}">${i}<br>${d.toLocaleDateString('en-US',{weekday:'narrow'})}</div></th>`;
     }
-    headerHTML += `<th class="p-2 sticky-col right-0 bg-gray-900 z-10 w-16 text-center"></th>`;
-    headerRow.innerHTML = headerHTML;
-
-    tbody.innerHTML = '';
+    headerHTML += `<th class="p-2 sticky-col right-0 bg-gray-900 z-10 w-16"></th>`;
+    document.getElementById('gridHeaderRow').innerHTML = headerHTML;
     
-    habits.forEach(habit => {
-        const tr = document.createElement('tr');
-        tr.className = "border-b border-gray-700 hover:bg-gray-800/50 transition group";
-        
-        let rowHTML = `
-            <td class="p-4 font-medium text-gray-200 sticky-col shadow-xl z-10 bg-gray-800 border-r border-gray-700">
-                <div class="flex flex-col">
-                    <span>${habit.text}</span>
-                    ${habit.type === 'numeric' ? `<span class="text-[10px] text-gray-500">Target: ${habit.target} ${habit.unit}</span>` : ''}
-                </div>
-            </td>
-        `;
+    const tbody = document.getElementById('habitGridBody'); 
+    tbody.innerHTML = '';
 
+    habits.forEach(habit => {
+        let rowHTML = `<td class="p-4 font-medium text-gray-200 sticky-col bg-gray-800 z-10 border-r border-gray-700 shadow-md whitespace-nowrap">
+            ${habit.text} 
+            ${habit.type === 'numeric' ? `<div class="text-[10px] text-gray-500">Target: ${habit.target} ${habit.unit}</div>` : ''}
+        </td>`;
+        
         for(let i = 1; i <= daysInMonth; i++) {
-            const dateObj = new Date(year, month, i);
-            const dateKey = formatDateKey(dateObj);
-            const val = habit.history[dateKey]; 
+            const dateKey = formatDateKey(new Date(viewDate.getFullYear(), viewDate.getMonth(), i));
+            const val = habit.history[dateKey];
             
-            rowHTML += `<td class="p-2 text-center border-l border-gray-700/30">`;
-            
+            rowHTML += `<td class="p-2 text-center border-b border-gray-700/50 hover:bg-gray-700/30 transition">`;
             if (habit.type === 'boolean') {
-                const isChecked = val === 1 || val === true; 
-                rowHTML += `
-                    <input type="checkbox" class="custom-checkbox mx-auto" 
-                        onchange="toggleHabitBoolean(${habit.id}, '${dateKey}')" 
-                        ${isChecked ? 'checked' : ''}>
-                `;
+                rowHTML += `<input type="checkbox" class="custom-checkbox mx-auto" onchange="toggleHabitBoolean(${habit.id}, '${dateKey}')" ${val ? 'checked' : ''}>`;
             } else {
-                const displayVal = val !== undefined ? val : '';
-                const metGoal = val >= habit.target;
-                const borderClass = metGoal ? 'border-green-500/50 text-green-400 font-bold' : 'border-gray-600 text-gray-300';
-                
-                rowHTML += `
-                    <input type="number" 
-                        class="w-10 h-8 bg-gray-900 border ${borderClass} rounded text-center text-xs focus:border-blue-500 focus:text-white outline-none appearance-none transition-colors"
-                        value="${displayVal}"
-                        placeholder="-"
-                        onblur="updateHabitNumeric(this, ${habit.id}, '${dateKey}')"
-                        onkeypress="handleEnter(event, this)">
-                `;
+                const isHit = val >= habit.target;
+                const bgClass = isHit ? 'bg-green-900/50 border-green-700 text-green-400' : 'bg-gray-900 border-gray-600';
+                rowHTML += `<input type="number" class="w-10 h-8 ${bgClass} border rounded text-center text-xs outline-none focus:border-blue-500" value="${val || ''}" onblur="updateHabitNumeric(this, ${habit.id}, '${dateKey}')">`;
             }
             rowHTML += `</td>`;
         }
-
-        rowHTML += `
-            <td class="p-2 text-center sticky-col right-0 bg-gray-800 z-10 border-l border-gray-700">
-                <button onclick="deleteHabit(${habit.id})" class="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </td>
-        `;
-
-        tr.innerHTML = rowHTML;
-        tbody.appendChild(tr);
+        rowHTML += `<td class="p-2 sticky-col right-0 bg-gray-800 z-10 border-l border-gray-700 text-center"><button onclick="deleteHabit(${habit.id})" class="text-gray-600 hover:text-red-500 transition"><i class="fas fa-trash"></i></button></td>`;
+        tbody.innerHTML += `<tr>${rowHTML}</tr>`;
     });
+
+    updateMonthlyStats();
+}
+
+async function toggleHabitBoolean(id, date) {
+    const habit = habits.find(h => h.id === id);
+    const val = !habit.history[date];
+    habit.history[date] = val ? 1 : 0;
+    await apiCall('/history', 'POST', { habit_id: id, date, value: val ? 1 : 0 });
+    updateDashboardStats();
+    updateMonthlyStats();
+}
+
+async function updateHabitNumeric(input, id, date) {
+    const val = parseFloat(input.value);
+    const habit = habits.find(h => h.id === id);
+    habit.history[date] = val;
+    await apiCall('/history', 'POST', { habit_id: id, date, value: val });
+    
+    const isHit = val >= habit.target;
+    if(isHit) {
+        input.className = "w-10 h-8 bg-green-900/50 border-green-700 text-green-400 border rounded text-center text-xs outline-none focus:border-blue-500";
+    } else {
+        input.className = "w-10 h-8 bg-gray-900 border-gray-600 border rounded text-center text-xs outline-none focus:border-blue-500";
+    }
+    updateDashboardStats();
+    updateMonthlyStats();
 }
 
 // ==========================================
-// 5. HABIT MANAGEMENT
+// 4. MODALS & FORMS
 // ==========================================
 
-function openHabitModal() {
-    document.getElementById('habitModal').classList.remove('hidden');
-    document.getElementById('habitModal').classList.add('flex');
-    document.getElementById('habitName').focus();
-}
-
-function closeHabitModal() {
-    document.getElementById('habitModal').classList.add('hidden');
-    document.getElementById('habitModal').classList.remove('flex');
-    document.getElementById('habitName').value = '';
-    document.getElementById('habitUnit').value = '';
-    document.getElementById('habitTarget').value = '';
-    document.getElementById('habitType').value = 'boolean';
-    toggleHabitFields();
-}
-
+function openHabitModal() { document.getElementById('habitModal').classList.remove('hidden'); document.getElementById('habitModal').classList.add('flex'); }
+function closeHabitModal() { document.getElementById('habitModal').classList.add('hidden'); document.getElementById('habitModal').classList.remove('flex'); }
 function toggleHabitFields() {
     const type = document.getElementById('habitType').value;
-    const isNum = type === 'numeric';
-    document.getElementById('unitField').classList.toggle('hidden', !isNum);
-    document.getElementById('targetField').classList.toggle('hidden', !isNum);
+    if (type === 'numeric') {
+        document.getElementById('unitField').classList.remove('hidden');
+        document.getElementById('targetField').classList.remove('hidden');
+    } else {
+        document.getElementById('unitField').classList.add('hidden');
+        document.getElementById('targetField').classList.add('hidden');
+    }
 }
-
 async function saveHabit(e) {
     e.preventDefault();
-    const name = document.getElementById('habitName').value;
+    const text = document.getElementById('habitName').value;
     const type = document.getElementById('habitType').value;
     const unit = document.getElementById('habitUnit').value;
     const target = document.getElementById('habitTarget').value;
-
-    if(name) {
-        const payload = { 
-            text: name, 
-            type: type,
-            unit: type === 'numeric' ? unit : '',
-            target: type === 'numeric' ? parseFloat(target) : 1
-        };
-
-        const res = await apiCall('/habits', 'POST', payload);
-        habits.push({ ...payload, id: res.id, history: {} });
-        closeHabitModal();
-        renderMonthGrid();
-        updateDashboardStats();
-    }
+    await apiCall('/habits', 'POST', { text, type, unit, target });
+    closeHabitModal();
+    initApp();
 }
-
 async function deleteHabit(id) {
-    if(confirm("Delete this habit permanently?")) {
+    if(confirm('Delete this habit?')) {
         await apiCall(`/habits/${id}`, 'DELETE');
-        habits = habits.filter(h => h.id !== id);
-        renderMonthGrid();
-        updateDashboardStats();
+        initApp();
     }
-}
-
-async function toggleHabitBoolean(id, dateKey) {
-    const habit = habits.find(h => h.id === id);
-    if(habit) {
-        const newVal = habit.history[dateKey] ? null : 1;
-        if(newVal === null) delete habit.history[dateKey];
-        else habit.history[dateKey] = 1;
-        await apiCall('/history', 'POST', { habitId: id, date: dateKey, value: newVal });
-        updateDashboardStats(); 
-    }
-}
-
-async function updateHabitNumeric(input, id, dateKey) {
-    const val = parseFloat(input.value);
-    const habit = habits.find(h => h.id === id);
-    if(habit) {
-        let sendVal = val;
-        if(isNaN(val) || input.value === '') {
-            delete habit.history[dateKey];
-            sendVal = null;
-            input.classList.remove('border-green-500/50', 'text-green-400', 'font-bold');
-            input.classList.add('border-gray-600', 'text-gray-300');
-        } else {
-            habit.history[dateKey] = val;
-            if(val >= habit.target) {
-                input.classList.remove('border-gray-600', 'text-gray-300');
-                input.classList.add('border-green-500/50', 'text-green-400', 'font-bold');
-            } else {
-                input.classList.remove('border-green-500/50', 'text-green-400', 'font-bold');
-                input.classList.add('border-gray-600', 'text-gray-300');
-            }
-        }
-        await apiCall('/history', 'POST', { habitId: id, date: dateKey, value: sendVal });
-        updateDashboardStats();
-    }
-}
-
-function handleEnter(e, input) { if(e.key === 'Enter') input.blur(); }
-
-// ==========================================
-// 6. TASK MANAGER
-// ==========================================
-
-function renderTasks() {
-    const container = document.getElementById('taskList');
-    container.innerHTML = '';
-    let doneCount = 0;
-    tasks.forEach(task => {
-        if(task.done) doneCount++;
-        const div = document.createElement('div');
-        div.className = `flex justify-between items-center p-3 rounded bg-gray-900 border ${task.done ? 'border-green-800/50 opacity-60' : 'border-gray-700'} transition-all`;
-        div.innerHTML = `
-            <div class="flex items-center gap-3 cursor-pointer group" onclick="toggleTask(${task.id})">
-                <div class="w-5 h-5 border-2 rounded ${task.done ? 'bg-green-500 border-green-500' : 'border-gray-500 group-hover:border-blue-400'} flex items-center justify-center transition-colors">
-                    ${task.done ? '<i class="fas fa-check text-xs text-white"></i>' : ''}
-                </div>
-                <span class="${task.done ? 'line-through text-gray-500' : 'text-gray-200'} select-none">${task.text}</span>
-            </div>
-            <button onclick="deleteTask(${task.id})" class="text-gray-600 hover:text-red-500 transition"><i class="fas fa-times"></i></button>
-        `;
-        container.appendChild(div);
-    });
-    document.getElementById('stat-tasks-done').innerText = `${doneCount}/${tasks.length}`;
 }
 
 async function addTask() {
-    const input = document.getElementById('taskInput');
-    if(input.value.trim()) {
-        const text = input.value;
-        const res = await apiCall('/tasks', 'POST', { text });
-        tasks.push({ id: res.id, text: text, done: false });
-        input.value = '';
-        renderTasks();
+    const text = document.getElementById('taskInput').value;
+    if(!text) return;
+    await apiCall('/tasks', 'POST', { text });
+    document.getElementById('taskInput').value = '';
+    initApp();
+}
+async function toggleTask(id, done) {
+    await apiCall(`/tasks/${id}`, 'PUT', { done });
+    initApp();
+}
+async function deleteTask(id) {
+    await apiCall(`/tasks/${id}`, 'DELETE');
+    initApp();
+}
+function renderTasks() {
+    const list = document.getElementById('taskList');
+    list.innerHTML = '';
+    tasks.forEach(t => {
+        list.innerHTML += `
+            <div class="flex items-center justify-between bg-gray-900 p-3 rounded border border-gray-700 group">
+                <div class="flex items-center gap-3">
+                    <input type="checkbox" ${t.done?'checked':''} onclick="toggleTask(${t.id}, ${!t.done})" class="custom-checkbox">
+                    <span class="${t.done?'line-through text-gray-500':'text-gray-200'}">${t.text}</span>
+                </div>
+                <button onclick="deleteTask(${t.id})" class="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><i class="fas fa-trash"></i></button>
+            </div>
+        `;
+    });
+}
+
+// Profile Modal
+async function openProfileModal() {
+    document.getElementById('profileModal').classList.remove('hidden');
+    document.getElementById('profileModal').classList.add('flex');
+    
+    const user = await apiCall('/me');
+    if(user) {
+        document.getElementById('profUsername').value = user.username;
+        document.getElementById('profFullName').value = user.full_name || '';
+        document.getElementById('profAge').value = user.age || '';
+        document.getElementById('profGender').value = user.gender || '';
+        document.getElementById('profLocation').value = user.location || '';
     }
 }
+function closeProfileModal() { document.getElementById('profileModal').classList.add('hidden'); document.getElementById('profileModal').classList.remove('flex'); }
 
-async function toggleTask(id) { 
-    const t = tasks.find(x => x.id === id); 
-    if(t) { t.done = !t.done; renderTasks(); await apiCall(`/tasks/${id}`, 'PUT', { done: t.done }); } 
+async function saveProfile(e) {
+    e.preventDefault();
+    const payload = {
+        full_name: document.getElementById('profFullName').value,
+        age: document.getElementById('profAge').value,
+        gender: document.getElementById('profGender').value,
+        location: document.getElementById('profLocation').value
+    };
+    await apiCall('/profile', 'PUT', payload);
+    closeProfileModal();
 }
 
-async function deleteTask(id) { 
-    tasks = tasks.filter(x => x.id !== id); renderTasks(); await apiCall(`/tasks/${id}`, 'DELETE'); 
+// ==========================================
+// 5. CHARTS & EXPORT
+// ==========================================
+
+function updateDashboardStats() {
+    if(!habits.length) return;
+    const today = new Date();
+    let totalChecks = 0;
+    for(let i=0; i<7; i++) {
+        const d = new Date(); d.setDate(today.getDate() - i);
+        const k = formatDateKey(d);
+        habits.forEach(h => { if(h.history[k]) totalChecks++; });
+    }
+    const score = Math.min(100, Math.round((totalChecks / (habits.length * 7)) * 100));
+    
+    document.getElementById('stat-weekly-score').innerText = score + '%';
+    document.getElementById('stat-total-habits').innerText = habits.length;
+    document.getElementById('stat-tasks-done').innerText = `${tasks.filter(t=>t.done).length}/${tasks.length}`;
 }
-
-
-// ==========================================
-// 7. DASHBOARD & CHARTS
-// ==========================================
 
 function initDashboardChart() {
     const ctx = document.getElementById('weeklyChart').getContext('2d');
-    let gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, 'rgba(96, 165, 250, 0.5)'); 
-    gradient.addColorStop(1, 'rgba(96, 165, 250, 0.0)');
+    if(weeklyChartInstance) weeklyChartInstance.destroy();
+    
     const labels = [];
+    const data = [];
     for(let i=6; i>=0; i--) {
-        const d = new Date(); d.setDate(d.getDate() - i);
+        const d = new Date(); d.setDate(new Date().getDate() - i);
         labels.push(d.toLocaleDateString('en-US', {weekday:'short'}));
+        
+        let count = 0;
+        const k = formatDateKey(d);
+        habits.forEach(h => {
+             const val = h.history[k];
+             if( (h.type==='boolean' && val) || (h.type==='numeric' && val>=h.target) ) count++;
+        });
+        data.push(count);
     }
-    myChart = new Chart(ctx, {
-        type: 'line',
+
+    weeklyChartInstance = new Chart(ctx, {
+        type: 'bar',
         data: {
-            labels: labels,
+            labels,
             datasets: [{
-                label: 'Completed',
-                data: [0,0,0,0,0,0,0],
-                borderColor: '#60A5FA', backgroundColor: gradient, borderWidth: 3,
-                pointBackgroundColor: '#1f2937', pointBorderColor: '#60A5FA', pointRadius: 4, fill: true, tension: 0.4
+                label: 'Habits Completed',
+                data,
+                backgroundColor: '#3b82f6',
+                borderRadius: 5
             }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
-            scales: { y: { beginAtZero: true, grid: { color: '#374151' }, ticks: { color: '#9CA3AF' } }, x: { grid: { display: false }, ticks: { color: '#9CA3AF' } } },
+            scales: { y: { grid: { color: '#374151' } }, x: { grid: { display: false } } },
             plugins: { legend: { display: false } }
         }
     });
 }
 
-function updateDashboardStats() {
-    if(!myChart) return;
-    document.getElementById('stat-total-habits').innerText = habits.length;
-    const last7DaysData = [];
-    let totalSuccesses = 0;
-    let possibleSuccesses = habits.length * 7; 
-    for(let i=6; i>=0; i--) {
-        const d = new Date(); d.setDate(d.getDate() - i);
-        const dateKey = formatDateKey(d);
-        let dailyScore = 0;
-        habits.forEach(h => {
-            const val = h.history[dateKey];
-            if(val !== undefined) {
-                if(h.type === 'numeric') { if(val >= h.target) dailyScore++; } 
-                else { dailyScore++; }
-            }
-        });
-        last7DaysData.push(dailyScore);
-        totalSuccesses += dailyScore;
-    }
-    myChart.data.datasets[0].data = last7DaysData;
-    myChart.update();
-    const pct = possibleSuccesses > 0 ? Math.round((totalSuccesses/possibleSuccesses)*100) : 0;
-    document.getElementById('stat-weekly-score').innerText = `${pct}%`;
-}
-
-function formatDateKey(date) {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
-// ==========================================
-// 8. NUMERIC ANALYTICS
-// ==========================================
-
 function initNumericAnalytics() {
-    const selector = document.getElementById('numericSelector');
-    const container = document.getElementById('numeric-analytics');
+    const sel = document.getElementById('numericSelector');
     const numericHabits = habits.filter(h => h.type === 'numeric');
-    if(numericHabits.length === 0) { container.classList.add('hidden'); return; }
-    container.classList.remove('hidden');
-    const currentVal = selector.value;
-    selector.innerHTML = '';
+    
+    if(numericHabits.length === 0) {
+        document.getElementById('numeric-analytics').classList.add('hidden');
+        return;
+    }
+    document.getElementById('numeric-analytics').classList.remove('hidden');
+    sel.innerHTML = '';
     numericHabits.forEach(h => {
-        const option = document.createElement('option');
-        option.value = h.id; option.text = `${h.text} (${h.unit})`;
-        selector.appendChild(option);
+        sel.innerHTML += `<option value="${h.id}">${h.text}</option>`;
     });
-    if(currentVal && numericHabits.find(h => h.id == currentVal)) { selector.value = currentVal; } 
-    else if(numericHabits.length > 0) { selector.value = numericHabits[0].id; }
     renderNumericChart();
 }
 
 function renderNumericChart() {
-    const habitId = document.getElementById('numericSelector').value;
-    if(!habitId) return;
-    const habit = habits.find(h => h.id == habitId);
+    const id = parseInt(document.getElementById('numericSelector').value);
+    const habit = habits.find(h => h.id === id);
     if(!habit) return;
-
-    const labels = [];
-    const dataPoints = [];
-    let total = 0; let maxVal = 0;
-    for(let i=29; i>=0; i--) {
-        const d = new Date(); d.setDate(d.getDate() - i);
-        const dateKey = formatDateKey(d);
-        const val = habit.history[dateKey] || 0; 
-        labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-        dataPoints.push(val);
-        total += val;
-        if(val > maxVal) maxVal = val;
-    }
-
-    document.getElementById('num-stat-total').innerText = `${total} ${habit.unit}`;
-    document.getElementById('num-stat-best').innerText = `${maxVal} ${habit.unit}`;
-    document.getElementById('num-stat-avg').innerText = `${(total / 30).toFixed(1)} ${habit.unit}/day`;
 
     const ctx = document.getElementById('numericChartCanvas').getContext('2d');
     if(numericChartInstance) numericChartInstance.destroy();
 
-    let gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, 'rgba(74, 222, 128, 0.6)'); gradient.addColorStop(1, 'rgba(74, 222, 128, 0.1)');
+    const labels = []; const data = [];
+    for(let i=14; i>=0; i--) {
+        const d = new Date(); d.setDate(new Date().getDate() - i);
+        labels.push(d.getDate());
+        data.push(habit.history[formatDateKey(d)] || 0);
+    }
 
     numericChartInstance = new Chart(ctx, {
-        type: 'bar',
+        type: 'line',
         data: {
-            labels: labels,
+            labels,
             datasets: [{
-                label: habit.text, data: dataPoints, backgroundColor: gradient, borderColor: '#4ade80', borderWidth: 1, borderRadius: 4, barPercentage: 0.6, 
-            }, {
-                type: 'line', label: 'Goal', data: new Array(30).fill(habit.target), borderColor: 'rgba(255, 255, 255, 0.3)', borderWidth: 1, borderDash: [5, 5], pointRadius: 0
+                label: habit.unit || 'Value',
+                data,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                tension: 0.3,
+                fill: true
             }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, grid: { color: '#374151' } }, x: { grid: { display: false }, ticks: { display: true, color: '#6B7280', font: { size: 10 }, maxTicksLimit: 6 } } }
+            scales: { y: { grid: { color: '#374151' } } },
+            plugins: { legend: { display: false } }
         }
     });
 }
+
+function exportToExcel() {
+    const wb = XLSX.utils.book_new();
+    const header = ['Date', 'Habit', 'Type', 'Target', 'Value'];
+    const rows = [header];
+    habits.forEach(h => {
+        Object.keys(h.history).forEach(date => {
+            rows.push([date, h.text, h.type, h.target||'-', h.history[date]]);
+        });
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Habit Data");
+    XLSX.writeFile(wb, "StreakyData.xlsx");
+}
+
+function detectLocation() {
+    const locationInput = document.getElementById('profLocation');
+    const locationStatus = document.getElementById('locationStatus');
+    const locationBtn = document.getElementById('locationBtn');
+    
+    // Show loading state
+    locationBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    locationStatus.textContent = 'Detecting your location...';
+    locationStatus.className = 'text-xs mt-1 text-blue-400';
+    locationStatus.classList.remove('hidden');
+    
+    if (!navigator.geolocation) {
+        locationStatus.textContent = 'Geolocation is not supported by your browser';
+        locationStatus.className = 'text-xs mt-1 text-red-400';
+        locationBtn.innerHTML = '<i class="fas fa-location-arrow"></i>';
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        async (position) => {
+            try {
+                const { latitude, longitude } = position.coords;
+                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`);
+                const data = await response.json();
+                
+                if (data.address) {
+                    const { city, town, village, county, state, country } = data.address;
+                    const location = [city || town || village, country].filter(Boolean).join(', ');
+                    locationInput.value = location;
+                    locationStatus.textContent = 'Location detected successfully!';
+                    locationStatus.className = 'text-xs mt-1 text-green-400';
+                } else {
+                    throw new Error('Could not determine location');
+                }
+            } catch (error) {
+                locationStatus.textContent = 'Error getting location details';
+                locationStatus.className = 'text-xs mt-1 text-red-400';
+            }
+            locationBtn.innerHTML = '<i class="fas fa-location-arrow"></i>';
+        },
+        (error) => {
+            let errorMessage = 'Error getting location';
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage = 'Location access was denied. Please enable it in your browser settings.';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage = 'Location information is unavailable.';
+                    break;
+                case error.TIMEOUT:
+                    errorMessage = 'The request to get location timed out.';
+                    break;
+            }
+            locationStatus.textContent = errorMessage;
+            locationStatus.className = 'text-xs mt-1 text-red-400';
+            locationBtn.innerHTML = '<i class="fas fa-location-arrow"></i>';
+        }
+    );
+}
+
+initApp();
