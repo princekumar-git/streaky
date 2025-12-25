@@ -42,7 +42,6 @@ This project is a lightweight, full-stack web application built without heavy fr
 To maintain privacy or exclusivity, registration requires an **Invite Code**.
 
 * **Standard User Code:** `user@invitation`
-* **Admin Access Code:** `princethakur24102005`
 
 ### 2. Dashboard
 
@@ -64,13 +63,6 @@ To maintain privacy or exclusivity, registration requires an **Invite Code**.
 
 
 * **Navigation:** Use the arrows to switch between months.
-
-### 4. Admin Panel
-
-* Log in using the Admin Code.
-* Access the panel via the Profile Dropdown -> "Admin Panel".
-* View total users, habits, and system health status.
-
 ---
 
 ## 🔧 Local Installation
@@ -79,7 +71,7 @@ If you want to run this locally:
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/yourusername/streaky.git
+git clone https://github.com/princekumar-git/streaky.git
 cd streaky
 
 ```
