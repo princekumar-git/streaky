@@ -1,5 +1,3 @@
----
-
 # 🔥 Streaky
 
 **Streaky** is a minimalist, data-driven habit tracker and task manager designed to help high performers own their habits and master their day. Built with a focus on simplicity and analytics, it allows users to visualize their progress through interactive charts and a GitHub-style commitment grid.
